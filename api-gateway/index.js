@@ -4,6 +4,15 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
+// CORS — allow the frontend (localhost:3000) to call the gateway (localhost:8000)
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin',  '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(200);
+    next();
+});
+
 app.get('/status', async (req, res) => {
     const services = {
         'user-service': 'http://user-service:8001/status',

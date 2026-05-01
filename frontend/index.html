@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RentPi — Rental Marketplace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- React + Babel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer onload="window.dispatchEvent(new Event('googlescriptloaded'))"></script>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; }
+  body { font-family: 'DM Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.25); border-radius: 3px; }
+
+  /* Keyframe animations used by components */
+  @keyframes fadeIn   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spin     { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes shimmer  { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  @keyframes blink    { 0%,80%,100% { opacity: 0; } 40% { opacity: 1; } }
+
+  .fade-in { animation: fadeIn 0.3s ease; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!--
+  ═══════════════════════════════════════════════════════════════
+  MODULE LOAD ORDER
+  Each file exports its components/pages to window.* so the
+  next file can use them. Load order matters:
+    1. tweaks-panel.jsx  — TweaksPanel, useTweaks, TweakSection…
+    2. theme.jsx         — ThemeCtx, AuthCtx, NavCtx, shared UI
+    3. Login.jsx         — LoginPage
+    4. Register.jsx      — RegisterPage
+    5. Products.jsx      — ProductsPage
+    6. Availability.jsx  — AvailabilityPage
+    7. Chat.jsx          — ChatPage
+    8. Profile.jsx       — ProfilePage
+    9. Analytics.jsx     — AnalyticsPage
+   10. Trending.jsx      — TrendingPage
+   11. app.jsx           — Root App (this file, inline)
+  ═══════════════════════════════════════════════════════════════
+-->
+
+<!-- 1. Tweaks panel -->
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<!-- 2. Design system: theme tokens + shared UI components + Navbar -->
+<script type="text/babel" src="theme.jsx"></script>
+
+<!-- 3–10. Pages (same folder as index.html) -->
+<script type="text/babel" src="Login.jsx"></script>
+<script type="text/babel" src="Register.jsx"></script>
+<script type="text/babel" src="Products.jsx"></script>
+<script type="text/babel" src="Availability.jsx"></script>
+<script type="text/babel" src="Chat.jsx"></script>
+<script type="text/babel" src="Profile.jsx"></script>
+<script type="text/babel" src="Analytics.jsx"></script>
+<script type="text/babel" src="Trending.jsx"></script>
+
+<!-- 11. Root App -->
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accentHue": "cyan",
+  "density": "comfortable"
+}/*EDITMODE-END*/;
+
+// ── Tweaks panel wrapper ──────────────────────────────────────────────────────
+const AppTweaks = ({ tweaks, setTweak }) => {
+  if (!tweaks) return null;
+  return (
+    <TweaksPanel title="RentPi Tweaks">
+      <TweakSection label="Appearance">
+        <TweakRadio
+          label="Theme" id="theme" value={tweaks.theme}
+          onChange={v => setTweak('theme', v)}
+          options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]}
+        />
+        <TweakSelect
+          label="Accent color" id="accentHue" value={tweaks.accentHue}
+          onChange={v => setTweak('accentHue', v)}
+          options={[
+            { value: 'cyan',    label: 'Cyan / Amber'    },
+            { value: 'violet',  label: 'Violet / Purple'  },
+            { value: 'emerald', label: 'Emerald / Green'  },
+          ]}
+        />
+      </TweakSection>
+      <TweakSection label="Layout">
+        <TweakRadio
+          label="Density" id="density" value={tweaks.density}
+          onChange={v => setTweak('density', v)}
+          options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]}
+        />
+      </TweakSection>
+    </TweaksPanel>
+  );
+};
+
+// ── Root App ──────────────────────────────────────────────────────────────────
+const App = () => {
+  const { tweaks: rawTweaks, setTweak } = useTweaks(TWEAK_DEFAULTS);
+  const tweaks = rawTweaks || TWEAK_DEFAULTS;
+
+  const themeKey  = tweaks.theme     || 'dark';
+  const accentHue = tweaks.accentHue || 'cyan';
+  const baseTheme = THEMES[themeKey];
+  const accent    = ACCENT_HUES[accentHue]?.[themeKey] || baseTheme.accent;
+  const t = { ...baseTheme, accent, accentBg: accent + '18', accentHover: accent + '25', theme: themeKey };
+
+  const toggleTheme = () => setTweak('theme', themeKey === 'dark' ? 'light' : 'dark');
+
+  const [token,       setToken]       = useState(() => localStorage.getItem('rentpi_token') || '');
+  const [user,        setUser]        = useState(null);
+  const [authLoading, setAuthLoading] = useState(!!token);
+  const API = 'http://localhost:8000';
+
+  useEffect(() => {
+    if (!token) { setAuthLoading(false); return; }
+    fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json()).then(setUser)
+      .catch(() => setUser({ name: 'Demo User', email: 'demo@rentpi.com', id: 42 }))
+      .finally(() => setAuthLoading(false));
+  }, [token]);
+
+  const login = (tok) => {
+    localStorage.setItem('rentpi_token', tok);
+    setToken(tok);
+    fetch(`${API}/users/me`, { headers: { Authorization: `Bearer ${tok}` } })
+      .then(r => r.json()).then(setUser)
+      .catch(() => setUser({ name: 'Demo User', email: 'demo@rentpi.com', id: 42 }));
+  };
+
+  const logout = () => { localStorage.removeItem('rentpi_token'); setToken(''); setUser(null); setPage('login'); };
+
+  const loginGuest = () => {
+    setToken('demo');
+    setUser({ name: 'Demo User', email: 'demo@rentpi.com', id: 42 });
+    setAuthLoading(false);
+  };
+
+  const [page,         setPage]         = useState('login');
+  const [checkProduct, setCheckProduct] = useState(null);
+  const go = (p) => { setPage(p); window.scrollTo({ top: 0 }); };
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (user  && (page === 'login' || page === 'register')) go('products');
+      if (!user && page !== 'register') setPage('login');
+    }
+  }, [user, authLoading]);
+
+  if (authLoading) {
+    return (
+      <div style={{ height: '100vh', background: THEMES[themeKey].bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.1)', borderTop: `2px solid ${accent}`, animation: 'spin 0.7s linear infinite' }} />
+        <span style={{ color: THEMES[themeKey].textSec, fontSize: 14 }}>Loading RentPi…</span>
+      </div>
+    );
+  }
+
+  const renderPage = () => {
+    if (!user) {
+      return (
+        <div>
+          {page === 'register' ? <RegisterPage /> : <LoginPage />}
+          <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 50 }}>
+            <button onClick={loginGuest} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, background: THEMES[themeKey].surface, color: THEMES[themeKey].textSec, border: `1px solid ${THEMES[themeKey].border}`, cursor: 'pointer', fontFamily: 'DM Sans' }}>
+              Continue as Guest →
+            </button>
+          </div>
+        </div>
+      );
+    }
+    switch (page) {
+      case 'products':     return <ProductsPage />;
+      case 'availability': return <AvailabilityPage />;
+      case 'chat':         return <ChatPage />;
+      case 'trending':     return <TrendingPage />;
+      case 'analytics':    return <AnalyticsPage />;
+      case 'profile':      return <ProfilePage />;
+      default:             return <ProductsPage />;
+    }
+  };
+
+  return (
+    <ThemeCtx.Provider value={{ t, theme: themeKey, toggleTheme }}>
+      <AuthCtx.Provider value={{ user, token, login, logout }}>
+        <NavCtx.Provider value={{ page, go, checkProduct, setCheckProduct }}>
+          <div style={{ background: t.bg, minHeight: '100vh', color: t.text }}>
+            {user && <Navbar />}
+            {renderPage()}
+            <AppTweaks tweaks={tweaks} setTweak={setTweak} />
+          </div>
+        </NavCtx.Provider>
+      </AuthCtx.Provider>
+    </ThemeCtx.Provider>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 80 56" xmlns="http://www.w3.org/2000/svg">
+    <rect width="80" height="56" fill="#080d1a"/>
+    <rect x="8" y="8" width="12" height="12" rx="3" fill="#22d3ee"/>
+    <text x="24" y="18" fill="#f0f4ff" font-size="7" font-family="sans-serif" font-weight="700">RentPi</text>
+    <rect x="8" y="28" width="28" height="20" rx="3" fill="#111827" stroke="#1a2235" stroke-width="1"/>
+    <rect x="40" y="28" width="32" height="9" rx="3" fill="#111827" stroke="#1a2235" stroke-width="1"/>
+    <rect x="40" y="39" width="32" height="9" rx="3" fill="#111827" stroke="#1a2235" stroke-width="1"/>
+  </svg>
+</template>
+</body>
+</html>

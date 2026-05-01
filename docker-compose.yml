@@ -80,11 +80,13 @@ services:
     ports:
       - "${USER_SERVICE_PORT:-8001}:8001"
     environment:
-      PORT:              8001
-      DATABASE_URL:      ${DATABASE_URL}
-      JWT_SECRET:        ${JWT_SECRET}
-      CENTRAL_API_URL:   ${CENTRAL_API_URL}
-      CENTRAL_API_TOKEN: ${CENTRAL_API_TOKEN}
+      PORT:                 8001
+      DATABASE_URL:         ${DATABASE_URL}
+      JWT_SECRET:           ${JWT_SECRET}
+      CENTRAL_API_URL:      ${CENTRAL_API_URL}
+      CENTRAL_API_TOKEN:    ${CENTRAL_API_TOKEN}
+      GOOGLE_CLIENT_ID:     ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     depends_on:
       postgres:
         condition: service_healthy

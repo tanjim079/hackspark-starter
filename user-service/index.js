@@ -157,6 +157,45 @@ app.get('/users/me', async (req, res) => {
     }
 });
 
+// ===================== GOOGLE TOKEN (client-side GIS flow) =====================
+// Called by the frontend after Google Identity Services returns a credential token
+app.post('/users/google', async (req, res) => {
+    const { credential } = req.body;
+    if (!credential) {
+        return res.status(400).json({ error: "Google credential required" });
+    }
+    try {
+        const tokenRes = await axios.get(
+            `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`
+        );
+        const { email, name, sub: googleId, aud } = tokenRes.data;
+
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        if (clientId && aud !== clientId) {
+            return res.status(401).json({ error: "Token audience mismatch" });
+        }
+
+        let result = await pool.query(
+            'SELECT id, name, email FROM users WHERE email = $1', [email]
+        );
+        if (result.rows.length === 0) {
+            const hashed = await bcrypt.hash(`google_${googleId}`, 10);
+            result = await pool.query(
+                'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
+                [name || email.split('@')[0], email, hashed]
+            );
+        }
+
+        const user  = result.rows[0];
+        const token = jwt.sign({ id: user.id, email: user.email }, SECRET);
+        res.json({ token });
+
+    } catch (err) {
+        console.error('Google auth error:', err.response?.data || err.message);
+        res.status(401).json({ error: "Invalid Google credential" });
+    }
+});
+
 // ===================== GOOGLE AUTH ROUTES =====================
 
 // start login

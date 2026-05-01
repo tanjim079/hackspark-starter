@@ -93,9 +93,7 @@ app.get('/rentals/products/:id/availability', async (req, res) => {
             params: { product_id: productId }
         });
 
-        const rentals = response.data.data;
-
-        const intervals = rentals.map(r => ({
+        const intervals = response.data.data.map(r => ({
             start: r.rentalStart,
             end: r.rentalEnd
         }));
@@ -104,10 +102,9 @@ app.get('/rentals/products/:id/availability', async (req, res) => {
 
         let available = true;
 
-        for (const interval of merged) {
+        for (const i of merged) {
             const overlap =
-                !(toDate < new Date(interval.start) ||
-                    fromDate > new Date(interval.end));
+                !(toDate < new Date(i.start) || fromDate > new Date(i.end));
 
             if (overlap) {
                 available = false;
@@ -118,9 +115,9 @@ app.get('/rentals/products/:id/availability', async (req, res) => {
         const freeWindows = [];
         let current = new Date(fromDate);
 
-        for (const interval of merged) {
-            const start = new Date(interval.start);
-            const end = new Date(interval.end);
+        for (const i of merged) {
+            const start = new Date(i.start);
+            const end = new Date(i.end);
 
             if (end < fromDate) continue;
             if (start > toDate) break;
@@ -132,9 +129,7 @@ app.get('/rentals/products/:id/availability', async (req, res) => {
                 });
             }
 
-            if (current < end) {
-                current = new Date(end);
-            }
+            if (current < end) current = end;
         }
 
         if (current < toDate) {
@@ -168,10 +163,6 @@ app.get('/rentals/products/:id/free-streak', async (req, res) => {
         const { year } = req.query;
         const productId = Number(req.params.id);
 
-        if (!year) {
-            return res.status(400).json({ error: "year required" });
-        }
-
         const yearStart = new Date(`${year}-01-01`);
         const yearEnd = new Date(`${year}-12-31`);
 
@@ -179,14 +170,12 @@ app.get('/rentals/products/:id/free-streak', async (req, res) => {
             params: { product_id: productId }
         });
 
-        const rentals = response.data.data;
-
-        const intervals = rentals.map(r => ({
-            start: r.rentalStart,
-            end: r.rentalEnd
-        }));
-
-        const merged = mergeIntervals(intervals);
+        const intervals = mergeIntervals(
+            response.data.data.map(r => ({
+                start: r.rentalStart,
+                end: r.rentalEnd
+            }))
+        );
 
         let maxDays = 0;
         let bestStart = yearStart;
@@ -194,24 +183,22 @@ app.get('/rentals/products/:id/free-streak', async (req, res) => {
 
         let prevEnd = new Date(yearStart);
 
-        for (const interval of merged) {
-            const start = new Date(interval.start);
-            const end = new Date(interval.end);
+        for (const i of intervals) {
+            const start = new Date(i.start);
+            const end = new Date(i.end);
 
             if (end < yearStart) continue;
             if (start > yearEnd) break;
 
-            const gapDays = (start - prevEnd) / (1000 * 60 * 60 * 24);
+            const gap = (start - prevEnd) / (1000 * 60 * 60 * 24);
 
-            if (gapDays > maxDays) {
-                maxDays = gapDays;
+            if (gap > maxDays) {
+                maxDays = gap;
                 bestStart = prevEnd;
                 bestEnd = start;
             }
 
-            if (prevEnd < end) {
-                prevEnd = end;
-            }
+            if (prevEnd < end) prevEnd = end;
         }
 
         const finalGap = (yearEnd - prevEnd) / (1000 * 60 * 60 * 24);
@@ -242,26 +229,9 @@ app.get('/rentals/kth-busiest-date', async (req, res) => {
     try {
         const { from, to, k } = req.query;
 
-        if (!from || !to || !k) {
-            return res.status(400).json({ error: "from, to, k required" });
-        }
-
         const kNum = Number(k);
-        if (kNum <= 0) {
-            return res.status(400).json({ error: "k must be positive" });
-        }
-
-        const monthRegex = /^\d{4}-\d{2}$/;
-        if (!monthRegex.test(from) || !monthRegex.test(to)) {
-            return res.status(400).json({ error: "Invalid date format" });
-        }
-
-        if (from > to) {
-            return res.status(400).json({ error: "from cannot be after to" });
-        }
 
         let allData = [];
-
         let current = new Date(from + "-01");
         const end = new Date(to + "-01");
 
@@ -269,18 +239,11 @@ app.get('/rentals/kth-busiest-date', async (req, res) => {
             const monthStr = current.toISOString().slice(0, 7);
 
             const response = await api.get('/api/data/rentals/stats', {
-                params: {
-                    group_by: 'date',
-                    month: monthStr
-                }
+                params: { group_by: 'date', month: monthStr }
             });
 
             allData.push(...response.data.data);
             current.setMonth(current.getMonth() + 1);
-        }
-
-        if (!allData.length) {
-            return res.status(404).json({ error: "No data found" });
         }
 
         const heap = [];
@@ -289,10 +252,6 @@ app.get('/rentals/kth-busiest-date', async (req, res) => {
             heap.push(item);
             heap.sort((a, b) => a.count - b.count);
             if (heap.length > kNum) heap.shift();
-        }
-
-        if (heap.length < kNum) {
-            return res.status(404).json({ error: "k exceeds available data" });
         }
 
         const result = heap[0];
@@ -317,10 +276,6 @@ app.get('/rentals/users/:id/top-categories', async (req, res) => {
         const userId = req.params.id;
         const k = Number(req.query.k);
 
-        if (!k || k <= 0) {
-            return res.status(400).json({ error: "k must be positive" });
-        }
-
         const response = await api.get('/api/data/rentals', {
             params: { renter_id: userId }
         });
@@ -328,10 +283,7 @@ app.get('/rentals/users/:id/top-categories', async (req, res) => {
         const rentals = response.data.data;
 
         if (!rentals.length) {
-            return res.json({
-                userId: Number(userId),
-                topCategories: []
-            });
+            return res.json({ userId: Number(userId), topCategories: [] });
         }
 
         const productIds = [...new Set(rentals.map(r => r.productId))];
@@ -348,25 +300,17 @@ app.get('/rentals/users/:id/top-categories', async (req, res) => {
             products.push(...batchResponse.data.data);
         }
 
-        const productCategoryMap = {};
-        for (const p of products) {
-            productCategoryMap[p.id] = p.category;
-        }
+        const map = {};
+        products.forEach(p => map[p.id] = p.category);
 
-        const categoryCount = {};
+        const count = {};
+        rentals.forEach(r => {
+            const cat = map[r.productId];
+            if (cat) count[cat] = (count[cat] || 0) + 1;
+        });
 
-        for (const r of rentals) {
-            const category = productCategoryMap[r.productId];
-            if (!category) continue;
-
-            categoryCount[category] = (categoryCount[category] || 0) + 1;
-        }
-
-        const result = Object.entries(categoryCount)
-            .map(([category, count]) => ({
-                category,
-                rentalCount: count
-            }))
+        const result = Object.entries(count)
+            .map(([category, rentalCount]) => ({ category, rentalCount }))
             .sort((a, b) => b.rentalCount - a.rentalCount)
             .slice(0, k);
 
@@ -381,5 +325,79 @@ app.get('/rentals/users/:id/top-categories', async (req, res) => {
 });
 
 
-// ===================== START SERVER =====================
+// ===================== P12 =====================
+app.get('/rentals/merged-feed', async (req, res) => {
+    try {
+        let { productIds, limit } = req.query;
+
+        let ids = [...new Set(productIds.split(',').map(Number))];
+        const limitNum = Number(limit);
+
+        const lists = [];
+
+        for (const id of ids) {
+            const response = await api.get('/api/data/rentals', {
+                params: { product_id: id }
+            });
+            lists.push(response.data.data);
+        }
+
+        const heap = [];
+
+        lists.forEach((list, i) => {
+            if (list.length > 0) {
+                heap.push({
+                    item: list[0],
+                    listIndex: i,
+                    pointer: 0
+                });
+            }
+        });
+
+        const sortHeap = () => {
+            heap.sort((a, b) =>
+                new Date(a.item.rentalStart) - new Date(b.item.rentalStart)
+            );
+        };
+
+        sortHeap();
+
+        const result = [];
+
+        while (heap.length && result.length < limitNum) {
+            const smallest = heap.shift();
+
+            result.push({
+                rentalId: smallest.item.id,
+                productId: smallest.item.productId,
+                rentalStart: smallest.item.rentalStart,
+                rentalEnd: smallest.item.rentalEnd
+            });
+
+            const { listIndex, pointer } = smallest;
+            const next = pointer + 1;
+
+            if (lists[listIndex][next]) {
+                heap.push({
+                    item: lists[listIndex][next],
+                    listIndex,
+                    pointer: next
+                });
+                sortHeap();
+            }
+        }
+
+        res.json({
+            productIds: ids,
+            limit: limitNum,
+            feed: result
+        });
+
+    } catch {
+        res.status(500).json({ error: "merged feed error" });
+    }
+});
+
+
+// ===================== START =====================
 app.listen(8002, () => console.log("rental-service running"));

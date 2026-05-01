@@ -176,6 +176,7 @@ app.get('/users/:id/discount', async (req, res) => {
         else if (score >= 60) discount = 15;
         else if (score >= 40) discount = 10;
         else if (score >= 20) discount = 5;
+        else discount = 0;
 
         res.json({
             userId: Number(userId),

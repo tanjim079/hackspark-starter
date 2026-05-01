@@ -1,9 +1,11 @@
 const express = require('express');
+const NodeCache = require('node-cache');
 const api = require('./services/centralApi');
 const { setCategories, getCategories } = require('./services/cache');
 const { mergeIntervals } = require('./services/intervalUtils');
 
 const app = express();
+const cache = new NodeCache({ stdTTL: 60 }); // Cache for 60 seconds
 
 // ===================== STATUS =====================
 app.get('/status', (req, res) => {
@@ -14,6 +16,13 @@ app.get('/status', (req, res) => {
 // ===================== P5 =====================
 app.get('/rentals/products', async (req, res) => {
     try {
+        const cacheKey = `products_${JSON.stringify(req.query)}`;
+        const cachedResponse = cache.get(cacheKey);
+        
+        if (cachedResponse) {
+            return res.json(cachedResponse);
+        }
+
         const { category } = req.query;
 
         let categories = getCategories();
@@ -34,10 +43,35 @@ app.get('/rentals/products', async (req, res) => {
             params: req.query
         });
 
+        cache.set(cacheKey, response.data);
         res.json(response.data);
 
-    } catch {
-        res.status(500).json({ error: "Failed to fetch products" });
+    } catch (err) {
+        res.status(err.response?.status || 500).json({ error: "Failed to fetch products" });
+    }
+});
+
+
+// ===================== P3 =====================
+app.get('/rentals/products/:id', async (req, res) => {
+    try {
+        const cacheKey = `product_${req.params.id}`;
+        const cachedResponse = cache.get(cacheKey);
+        
+        if (cachedResponse) {
+            return res.json(cachedResponse);
+        }
+
+        const response = await api.get(`/api/data/products/${req.params.id}`);
+
+        cache.set(cacheKey, response.data);
+        res.json(response.data);
+
+    } catch (err) {
+        res.status(err.response?.status || 500).json({
+            error: "Central API error",
+            message: err.response?.data || err.message
+        });
     }
 });
 
@@ -226,7 +260,7 @@ app.get('/rentals/kth-busiest-date', async (req, res) => {
             from,
             to,
             k: kNum,
-            date: result.date,
+            date: result.date.split('T')[0],
             rentalCount: result.count
         });
 

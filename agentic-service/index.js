@@ -8,10 +8,15 @@ const { askLLM } = require('./services/llm');
 const Session = require('./models/session');
 const Message = require('./models/message');
 
-require('./services/db'); // connect Mongo
+require('./services/db');
 
 const app = express();
 app.use(express.json());
+
+const CENTRAL_API_URL    = process.env.CENTRAL_API_URL;
+const CENTRAL_API_TOKEN  = process.env.CENTRAL_API_TOKEN;
+const ANALYTICS_URL      = process.env.ANALYTICS_SERVICE_URL || 'http://analytics-service:8003';
+const RENTAL_URL         = process.env.RENTAL_SERVICE_URL    || 'http://rental-service:8002';
 
 
 // ================= STATUS =================
@@ -24,6 +29,14 @@ app.get('/status', (req, res) => {
 app.post('/chat', async (req, res) => {
     try {
         const { sessionId, message } = req.body;
+
+        // ===== 0. INPUT VALIDATION =====
+        if (!sessionId || typeof sessionId !== 'string' || !sessionId.trim()) {
+            return res.status(400).json({ error: "sessionId is required" });
+        }
+        if (!message || typeof message !== 'string' || !message.trim()) {
+            return res.status(400).json({ error: "message is required" });
+        }
 
         // ===== 1. TOPIC GUARD =====
         if (!isOnTopic(message)) {
@@ -41,15 +54,14 @@ app.post('/chat', async (req, res) => {
 
         let data = null;
 
-        // ===== 4. FETCH DATA =====
+        // ===== 4. FETCH REAL DATA =====
         try {
             if (intent === "topCategory") {
                 const response = await axios.get(
-                    'https://technocracy.brittoo.xyz/api/data/rentals/stats?group_by=category',
+                    `${CENTRAL_API_URL}/api/data/rentals/stats`,
                     {
-                        headers: {
-                            Authorization: `Bearer ${process.env.CENTRAL_API_TOKEN}`
-                        }
+                        params: { group_by: 'category' },
+                        headers: { Authorization: `Bearer ${CENTRAL_API_TOKEN}` }
                     }
                 );
                 data = response.data.data;
@@ -57,35 +69,39 @@ app.post('/chat', async (req, res) => {
 
             else if (intent === "recommendations") {
                 const today = new Date().toISOString().split("T")[0];
-
                 const response = await axios.get(
-                    `http://analytics-service:8003/analytics/recommendations?date=${today}&limit=5`
+                    `${ANALYTICS_URL}/analytics/recommendations`,
+                    { params: { date: today, limit: 5 } }
                 );
                 data = response.data;
             }
 
             else if (intent === "peak") {
                 const response = await axios.get(
-                    'http://analytics-service:8003/analytics/peak-window?from=2024-01&to=2024-06'
+                    `${ANALYTICS_URL}/analytics/peak-window`,
+                    { params: { from: '2024-01', to: '2024-06' } }
                 );
                 data = response.data;
             }
 
             else if (intent === "surge") {
+                const now = new Date();
+                const month = now.toISOString().slice(0, 7);
                 const response = await axios.get(
-                    'http://analytics-service:8003/analytics/surge-days?month=2024-03'
+                    `${ANALYTICS_URL}/analytics/surge-days`,
+                    { params: { month } }
                 );
                 data = response.data;
             }
 
             else {
-                data = "No structured data available";
+                data = "No structured data available for this question.";
             }
 
         } catch (err) {
             return res.json({
                 sessionId,
-                reply: "Data not available right now."
+                reply: "Data not available right now. Please try again later."
             });
         }
 
@@ -94,50 +110,37 @@ app.post('/chat', async (req, res) => {
             .map(m => `${m.role}: ${m.content}`)
             .join('\n');
 
-        const prompt = `
-You are RentPi assistant.
+        const prompt = `You are a helpful assistant for RentPi, a rental marketplace platform.
 
-Conversation:
-${historyText}
-
+${historyText ? `Conversation so far:\n${historyText}\n` : ''}
 User: ${message}
 
-Data:
-${JSON.stringify(data)}
+Relevant data:
+${JSON.stringify(data, null, 2)}
 
 Rules:
-- Use ONLY the data
-- Do NOT guess
-- If data missing → say not available
-`;
+- Answer using ONLY the data above.
+- Do NOT invent, guess, or extrapolate beyond the data.
+- If the data does not contain enough information, say "I don't have enough data to answer that."
+- Be concise and friendly.`;
 
         // ===== 6. LLM =====
         const reply = await askLLM(prompt);
 
         // ===== 7. SAVE MESSAGES =====
-        await Message.create({
-            sessionId,
-            role: "user",
-            content: message
-        });
+        await Message.create({ sessionId, role: "user",      content: message });
+        await Message.create({ sessionId, role: "assistant", content: reply   });
 
-        await Message.create({
-            sessionId,
-            role: "assistant",
-            content: reply
-        });
-
-        // ===== 8. SESSION HANDLING =====
+        // ===== 8. SESSION UPSERT =====
         let session = await Session.findOne({ sessionId });
 
         if (!session) {
-            // generate session name
-            const namePrompt = `Give a short 3-5 word title: ${message}`;
+            const namePrompt = `Give a short 3-5 word chat title for this message. Reply with ONLY the title, nothing else: "${message}"`;
             const name = await askLLM(namePrompt);
 
             await Session.create({
                 sessionId,
-                name,
+                name: name.trim().slice(0, 80),
                 lastMessageAt: new Date()
             });
         } else {
@@ -145,59 +148,76 @@ Rules:
             await session.save();
         }
 
-        // ===== RESPONSE =====
-        res.json({
-            sessionId,
-            reply
-        });
+        res.json({ sessionId, reply });
 
     } catch (err) {
-        res.status(500).json({ error: "chat error" });
+        console.error('chat error:', err.message);
+        res.status(500).json({ error: "Internal error" });
     }
 });
 
 
-// ================= GET SESSIONS =================
+// ================= LIST SESSIONS =================
 app.get('/chat/sessions', async (req, res) => {
-    const sessions = await Session.find().sort({ lastMessageAt: -1 });
+    try {
+        const sessions = await Session.find().sort({ lastMessageAt: -1 });
 
-    res.json({
-        sessions: sessions.map(s => ({
-            sessionId: s.sessionId,
-            name: s.name,
-            lastMessageAt: s.lastMessageAt
-        }))
-    });
+        res.json({
+            sessions: sessions.map(s => ({
+                sessionId:     s.sessionId,
+                name:          s.name,
+                lastMessageAt: s.lastMessageAt
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch sessions" });
+    }
 });
 
 
-// ================= GET HISTORY =================
+// ================= SESSION HISTORY =================
 app.get('/chat/:sessionId/history', async (req, res) => {
-    const { sessionId } = req.params;
+    try {
+        const { sessionId } = req.params;
 
-    const session = await Session.findOne({ sessionId });
-    const messages = await Message.find({ sessionId }).sort({ timestamp: 1 });
+        const session  = await Session.findOne({ sessionId });
+        const messages = await Message.find({ sessionId }).sort({ timestamp: 1 });
 
-    res.json({
-        sessionId,
-        name: session?.name,
-        messages
-    });
+        if (!session) {
+            return res.status(404).json({ error: "Session not found" });
+        }
+
+        res.json({
+            sessionId,
+            name:     session.name,
+            messages: messages.map(m => ({
+                role:      m.role,
+                content:   m.content,
+                timestamp: m.timestamp
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch history" });
+    }
 });
 
 
 // ================= DELETE SESSION =================
 app.delete('/chat/:sessionId', async (req, res) => {
-    const { sessionId } = req.params;
+    try {
+        const { sessionId } = req.params;
 
-    await Session.deleteOne({ sessionId });
-    await Message.deleteMany({ sessionId });
+        await Session.deleteOne({ sessionId });
+        await Message.deleteMany({ sessionId });
 
-    res.json({ message: "Session deleted" });
+        res.json({ message: "Session deleted", sessionId });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to delete session" });
+    }
 });
 
 
 // ================= START =================
 app.listen(8004, () => {
-    console.log("agentic-service running on 8004");
+    console.log("agentic-service running on port 8004");
 });

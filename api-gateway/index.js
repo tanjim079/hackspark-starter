@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 
@@ -30,6 +31,28 @@ app.get('/status', async (req, res) => {
         downstream: results
     });
 });
+
+// Proxy endpoints
+app.use(createProxyMiddleware({ 
+    target: 'http://user-service:8001', 
+    changeOrigin: true,
+    pathFilter: '/users'
+}));
+app.use(createProxyMiddleware({ 
+    target: 'http://rental-service:8002', 
+    changeOrigin: true,
+    pathFilter: '/rentals'
+}));
+app.use(createProxyMiddleware({ 
+    target: 'http://analytics-service:8003', 
+    changeOrigin: true,
+    pathFilter: '/analytics'
+}));
+app.use(createProxyMiddleware({ 
+    target: 'http://agentic-service:8004', 
+    changeOrigin: true,
+    pathFilter: '/agentic'
+}));
 
 app.listen(8000, () => {
     console.log('api-gateway running on port 8000');

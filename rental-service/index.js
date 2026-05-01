@@ -301,7 +301,7 @@ app.get('/rentals/kth-busiest-date', async (req, res) => {
             from,
             to,
             k: kNum,
-            date: result.date,
+            date: result.date.split('T')[0],
             rentalCount: result.count
         });
 

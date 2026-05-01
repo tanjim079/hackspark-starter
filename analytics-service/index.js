@@ -45,7 +45,9 @@ app.get('/analytics/peak-window', async (req, res) => {
 
         const fullDates = [];
         let d = new Date(from + "-01");
-        const last = new Date(to + "-31");
+        // Use day-0 of the next month to get the true last day (handles Feb, 30-day months)
+        const [toYear, toMon] = to.split('-').map(Number);
+        const last = new Date(toYear, toMon, 0);
 
         while (d <= last) {
             const dateStr = d.toISOString().split("T")[0];

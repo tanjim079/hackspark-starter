@@ -48,10 +48,10 @@ app.use(createProxyMiddleware({
     changeOrigin: true,
     pathFilter: '/analytics'
 }));
-app.use(createProxyMiddleware({ 
-    target: 'http://agentic-service:8004', 
+app.use(createProxyMiddleware({
+    target: 'http://agentic-service:8004',
     changeOrigin: true,
-    pathFilter: '/agentic'
+    pathFilter: '/chat'
 }));
 
 app.listen(8000, () => {

@@ -1,9 +1,11 @@
 const express = require('express');
 const axios = require('axios');
+const NodeCache = require('node-cache');
 
 const app = express();
+const cache = new NodeCache({ stdTTL: 60 }); // Cache for 60 seconds
 
-const BASE_URL = "https://technocracy.brittoo.xyz";
+const BASE_URL = process.env.CENTRAL_API_URL;
 const TOKEN = process.env.CENTRAL_API_TOKEN;
 
 // ✅ STATUS (keep for P1)
@@ -15,6 +17,13 @@ app.get('/status', (req, res) => {
 // ✅ GET ALL PRODUCTS (with query params)
 app.get('/rentals/products', async (req, res) => {
     try {
+        const cacheKey = `products_${JSON.stringify(req.query)}`;
+        const cachedResponse = cache.get(cacheKey);
+        
+        if (cachedResponse) {
+            return res.json(cachedResponse);
+        }
+
         const response = await axios.get(`${BASE_URL}/api/data/products`, {
             headers: {
                 Authorization: `Bearer ${TOKEN}`
@@ -22,6 +31,7 @@ app.get('/rentals/products', async (req, res) => {
             params: req.query   // forward ?category=&page=&limit=
         });
 
+        cache.set(cacheKey, response.data);
         res.json(response.data);
 
     } catch (err) {
@@ -36,6 +46,13 @@ app.get('/rentals/products', async (req, res) => {
 // ✅ GET PRODUCT BY ID
 app.get('/rentals/products/:id', async (req, res) => {
     try {
+        const cacheKey = `product_${req.params.id}`;
+        const cachedResponse = cache.get(cacheKey);
+        
+        if (cachedResponse) {
+            return res.json(cachedResponse);
+        }
+
         const response = await axios.get(
             `${BASE_URL}/api/data/products/${req.params.id}`,
             {
@@ -45,6 +62,7 @@ app.get('/rentals/products/:id', async (req, res) => {
             }
         );
 
+        cache.set(cacheKey, response.data);
         res.json(response.data);
 
     } catch (err) {

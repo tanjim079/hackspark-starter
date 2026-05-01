@@ -4,9 +4,11 @@ const KEYWORDS = [
     "rentpi", "booking", "gear", "surge", "peak", "trending"
 ];
 
-function isOnTopic(message) {
-    const text = message.toLowerCase();
-    return KEYWORDS.some(k => text.includes(k));
+function isOnTopic(msg) {
+    const keywords = [
+        "rental", "product", "category", "discount",
+        "availability", "rent", "price", "surge", "peak", "trend"
+    ];
+    return keywords.some(k => msg.toLowerCase().includes(k));
 }
-
 module.exports = { isOnTopic };

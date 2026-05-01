@@ -296,68 +296,62 @@ app.get('/rentals/merged-feed', async (req, res) => {
     try {
         let { productIds, limit } = req.query;
 
-        let ids = [...new Set(productIds.split(',').map(Number))];
-        const limitNum = Number(limit);
-
-        const lists = [];
-
-        for (const id of ids) {
-            const response = await api.get('/api/data/rentals', {
-                params: { product_id: id }
-            });
-            lists.push(response.data.data);
+        if (!productIds || !limit) {
+            return res.status(400).json({ error: "productIds and limit required" });
         }
 
-        const heap = [];
+        const ids = [...new Set(productIds.split(",").map(Number))];
+        const k = ids.length;
 
-        lists.forEach((list, i) => {
-            if (list.length > 0) {
-                heap.push({
-                    item: list[0],
-                    listIndex: i,
-                    pointer: 0
-                });
-            }
-        });
+        if (k === 0 || k > 10) {
+            return res.status(400).json({ error: "1-10 productIds required" });
+        }
 
-        const sortHeap = () => {
-            heap.sort((a, b) =>
-                new Date(a.item.rentalStart) - new Date(b.item.rentalStart)
-            );
-        };
+        limit = Number(limit);
+        if (limit <= 0 || limit > 100) {
+            return res.status(400).json({ error: "limit must be 1-100" });
+        }
 
-        sortHeap();
+        const streams = await Promise.all(
+            ids.map(id =>
+                api.get('/api/data/rentals', { params: { product_id: id } })
+            )
+        );
 
+        const lists = streams.map(r => r.data.data);
+
+        const ptr = new Array(k).fill(0);
         const result = [];
 
-        while (heap.length && result.length < limitNum) {
-            const smallest = heap.shift();
+        while (result.length < limit) {
+            let minIdx = -1;
+            let minDate = null;
 
+            for (let i = 0; i < k; i++) {
+                if (ptr[i] < lists[i].length) {
+                    const item = lists[i][ptr[i]];
+
+                    if (!minDate || new Date(item.rentalStart) < new Date(minDate)) {
+                        minDate = item.rentalStart;
+                        minIdx = i;
+                    }
+                }
+            }
+
+            if (minIdx === -1) break;
+
+            const item = lists[minIdx][ptr[minIdx]];
             result.push({
-                rentalId: smallest.item.id,
-                productId: smallest.item.productId,
-                rentalStart: smallest.item.rentalStart,
-                rentalEnd: smallest.item.rentalEnd
+                rentalId: item.id,
+                productId: item.productId,
+                rentalStart: item.rentalStart,
+                rentalEnd: item.rentalEnd
             });
 
-            const { listIndex, pointer } = smallest;
-            const next = pointer + 1;
-
-            if (lists[listIndex][next]) {
-                heap.push({
-                    item: lists[listIndex][next],
-                    listIndex,
-                    pointer: next
-                });
-                sortHeap();
-            }
+            ptr[minIdx]++;
         }
 
-        res.json({
-            productIds: ids,
-            limit: limitNum,
-            feed: result
-        });
+        res.json({ productIds: ids, limit, feed: result });
 
     } catch {
         res.status(500).json({ error: "merged feed error" });
